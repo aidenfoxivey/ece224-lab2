@@ -1,0 +1,11 @@
+#include <stdio.h>
+
+#include "system.h"
+#include "sys/irq.h"
+
+int main()
+{
+  printf("Hello from Nios II!\n");
+
+  return 0;
+}
