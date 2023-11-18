@@ -25,7 +25,7 @@ static void handle_timer_interrupt(void *context, alt_32 id);
 static void btn_interrupt(void *context, alt_32 id);
 int button_pressed = 0;
 int count_released = 0;
-int button = 0;
+int button_state = 0;
 
 int main()
 {
@@ -75,9 +75,9 @@ int main()
 static void handle_timer_interrupt(void* context, alt_32 id){
 	int current_value = IORD(BUTTON_PIO_BASE, 0);
 	IOWR(LED_PIO_BASE, 0, 0x1);
-	if (button == 0 && current_value != 0xF){
+	if (button_state == 0 && current_value != 0xF){
 		button_pressed = current_value;
-		button = 1;
+		button_state = 1;
 	}
 	if(current_value == 0xF){
 		count_released++;
@@ -92,7 +92,7 @@ static void handle_timer_interrupt(void* context, alt_32 id){
 
 			IOWR(LED_PIO_BASE, 0, 0x0);
 			count_released = 0;
-			button = 0;
+			button_state = 0;
 			IOWR_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE, 0x8);
 			IOWR(BUTTON_PIO_BASE, 2, 0xF);
 	}
