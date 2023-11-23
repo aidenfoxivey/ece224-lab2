@@ -33,8 +33,8 @@ enum State {
 #define REGULAR_SPEED 3
 #define HALF_SPEED 2
 #define DOUBLE_SPEED 6
-
 #define NUM_OF_FILES 13
+#define COUNT_RELEASED 50
 
 static alt_alarm alarm;
 static unsigned long Systick = 0;
@@ -334,6 +334,7 @@ int main(void) {
 		}
 		
 		while (p1 > 0 && (state == RUNNING_REGULAR || state == RUNNING_DOUBLE || state == RUNNING_HALF || state == RUNNING_MONO)) {
+            // if remaining file size is greater than buffer, subtract and continue
 			if ((uint32_t) p1 >= blen) 
 			{
 				cnt = blen;
@@ -365,6 +366,7 @@ int main(void) {
 				/* Calculate minimum space available in both FIFO */
 				min_bytes_to_write = MIN(left_space, right_space);
 
+                /* don't write more bytes than is left in the buffer */
 				if (min_bytes_to_write > remaining_bytes_in_buff) {
 					min_bytes_to_write = remaining_bytes_in_buff;
 				}
@@ -379,7 +381,7 @@ int main(void) {
 					memcpy(&r_buf, Buff + i + 2, 2);
 
 					/**
-					 * if mono, then write `l_buf` to both right and left FIFO'Ss
+					 * if mono, then write `l_buf` to both right and left FIFOs
 					 * otherwise, write `l_buf` to left FIFO and `r_buf` to right FIFO
 					 */
 					if (mono) {
@@ -427,7 +429,6 @@ static void button_ISR(void* context, alt_32 id) {
 	IOWR_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE, 0x5);
 }
 
-/* FIX THIS !!!!! FUBAR */
 static void timer_ISR(void* context, alt_32 id) {
 	int current_value = IORD(BUTTON_PIO_BASE, 0);
 	if (button_state == 0 && current_value != 0xF) {
@@ -436,54 +437,45 @@ static void timer_ISR(void* context, alt_32 id) {
 	}
 	if (current_value == 0xF) {
 		count_released++;
-		if (count_released < 20)
+        /* modified count_released from 20 to 50 to increase the debounce time */
+		if (count_released < COUNT_RELEASED)
 			IOWR_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE, 0x5);
 	} else {
 		count_released = 0;
 		IOWR_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE, 0x5);
 	}
-	if (count_released == 20) {
-
+	if (count_released == COUNT_RELEASED) {
 		IOWR(LED_PIO_BASE, 0, 0x0);
 		count_released = 0;
 		button_state = 0;
 		IOWR_ALTERA_AVALON_TIMER_CONTROL(TIMER_0_BASE, 0x8);
 		IOWR(BUTTON_PIO_BASE, 2, 0xF);
 
-		/* Get the button press */
-		if (button_pressed == 7) {
+		if (button_pressed == 7) { /* PREVIOUS BUTTON */
 			traverse_previous = 1;
 			button_pressed = 0;
-		} else if (button_pressed == 11) {
+		} else if (button_pressed == 11) { /* STOP BUTTON */
 			state = STOPPED;
-
 			button_pressed = 0;
-
-		} else if (button_pressed == 13) {
+		} else if (button_pressed == 13) { /* PAUSE BUTTON */
+            /* if state is paused or stopped, then read switches and set the value */
 			if (state == PAUSED || state == STOPPED) {
-				int switch_0, switch_1;
+                /* switch reading to a certain value */
+				int switch_0 = IORD(SWITCH_PIO_BASE, 0) & 0x1;
+				int switch_1 = IORD(SWITCH_PIO_BASE, 0) & 0x2;
 
-				switch_0 = IORD(SWITCH_PIO_BASE, 0) & 0x1;
-				switch_1 = IORD(SWITCH_PIO_BASE, 0) & 0x2;
+				if (switch_0 && switch_1) state = RUNNING_REGULAR;
+				if (switch_0 && !switch_1) state = RUNNING_HALF;
+				if (!switch_0 && switch_1) state = RUNNING_DOUBLE;
+				if (!switch_0 && !switch_1) state = RUNNING_MONO;
 
-				if (switch_0 && switch_1) {
-					state = RUNNING_REGULAR;
-				}
-				if (switch_0 && !switch_1) {
-					state = RUNNING_HALF;
-				}
-				if (!switch_0 && switch_1) {
-					state = RUNNING_DOUBLE;
-				}
-				if (!switch_0 && !switch_1) {
-					state = RUNNING_MONO;
-				}
+            /* if state is running at any speed, then set to stopped */
 			} else if (state == RUNNING_REGULAR || state == RUNNING_DOUBLE
 					|| state == RUNNING_HALF) {
 				state = PAUSED;
 			}
 			button_pressed = 0;
-		} else if (button_pressed == 14) {
+		} else if (button_pressed == 14) { /* NEXT BUTTON */
 			traverse_next = 1;
 			button_pressed = 0;
 		}
